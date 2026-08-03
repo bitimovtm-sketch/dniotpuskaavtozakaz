@@ -5,11 +5,13 @@ from datetime import date, timedelta
 
 import requests
 from flask import Flask, request
+from urllib.parse import urlparse
 
 logging.basicConfig(level=logging.INFO)
 
 WEBHOOK = os.environ["B24_WEBHOOK"].rstrip("/") + "/"
 NORM = int(os.environ.get("VACATION_NORM", 28))
+PORTAL = urlparse(WEBHOOK).netloc
 
 ENTITY_TYPE_ID = 1062
 F_START = "UF_CRM_22_1761003149"
@@ -121,7 +123,7 @@ document.getElementById('r').onclick = function(e){
 @app.route("/handler", methods=["POST"])
 def handler():
     opts = json.loads(request.form.get("PLACEMENT_OPTIONS", "{}"))
-    domain = request.form.get("DOMAIN")
+    domain = request.form.get("DOMAIN") or PORTAL
     auth_id = request.form.get("AUTH_ID")
     item_id = opts.get("ENTITY_VALUE_ID") or 0
 
@@ -159,7 +161,7 @@ def rest_oauth(domain, auth, method, params=None):
 
 @app.route("/", methods=["GET", "POST"])
 def install():
-    domain = request.form.get("DOMAIN", "")
+    domain = request.form.get("DOMAIN") or PORTAL
     auth = request.form.get("AUTH_ID", "")
     action = request.form.get("action", "")
     result = ""
