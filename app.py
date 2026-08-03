@@ -152,38 +152,68 @@ def handler():
 def install():
     return """<!doctype html><meta charset="utf-8">
 <script src="//api.bitrix24.com/api/v1/"></script>
-<style>body{font:14px Arial;padding:20px}button{padding:8px 14px;margin-right:8px}pre{background:#f5f5f5;padding:10px}</style>
+<style>body{font:14px Arial;padding:20px}button{padding:8px 14px;margin-right:8px}
+pre{background:#f5f5f5;padding:10px;min-height:60px;white-space:pre-wrap}</style>
 <h3>Остаток отпуска</h3>
 <button id="t">1. Зарегистрировать тип поля</button>
 <button id="f">2. Создать поле в смарт-процессе</button>
 <pre id="log"></pre>
 <script>
-var log = function(x){ document.getElementById('log').textContent += JSON.stringify(x) + "\\n"; };
-BX24.init(function(){
-  BX24.installFinish();
-  document.getElementById('t').onclick = function(){
-    BX24.callMethod('userfieldtype.add', {
-      USER_TYPE_ID: 'vacbal',
-      HANDLER: location.origin + '/handler',
-      TITLE: 'Остаток отпуска',
-      DESCRIPTION: 'Считает остаток дней отпуска за текущий год',
-      OPTIONS: {height: 36}
-    }, function(r){ log(r.error() || r.data()); });
-  };
-  document.getElementById('f').onclick = function(){
-    BX24.callMethod('app.info', {}, function(a){
-      var type = 'rest_' + a.data().ID + '_vacbal';
-      BX24.callMethod('userfieldconfig.add', {
-        moduleId: 'crm',
-        field: {
-          entityId: 'CRM_22',
-          fieldName: 'UF_CRM_22_VACATION_BALANCE',
-          userTypeId: type,
-          editFormLabel: {ru: 'Остаток отпуска'},
-          listColumnLabel: {ru: 'Остаток отпуска'}
-        }
-      }, function(r){ log(r.error() || {type: type, result: r.data()}); });
+var out = document.getElementById('log');
+function log(x){ out.textContent += (typeof x === 'string' ? x : JSON.stringify(x)) + "\\n"; }
+window.onerror = function(m){ log('Ошибка на странице: ' + m); };
+
+var ready = false;
+if (typeof BX24 === 'undefined') {
+  log('Не загрузилась библиотека Битрикс24. Откройте приложение из меню портала.');
+} else {
+  BX24.init(function(){
+    ready = true;
+    log('Связь с Битрикс24 установлена.');
+    try { BX24.installFinish(); } catch(e) {}
+  });
+}
+
+function check(){
+  if (!ready) { log('Связь с Битрикс24 ещё не установлена, подождите пару секунд.'); }
+  return ready;
+}
+
+document.getElementById('t').onclick = function(){
+  if (!check()) return;
+  log('Регистрирую тип поля...');
+  BX24.callMethod('userfieldtype.add', {
+    USER_TYPE_ID: 'vacbal',
+    HANDLER: location.origin + '/handler',
+    TITLE: 'Остаток отпуска',
+    DESCRIPTION: 'Считает остаток дней отпуска за текущий год',
+    OPTIONS: {height: 36}
+  }, function(r){
+    if (r.error()) log('Не получилось: ' + JSON.stringify(r.error()));
+    else log('Готово, тип поля зарегистрирован.');
+  });
+};
+
+document.getElementById('f').onclick = function(){
+  if (!check()) return;
+  log('Создаю поле...');
+  BX24.callMethod('app.info', {}, function(a){
+    if (a.error()) { log('Не получилось: ' + JSON.stringify(a.error())); return; }
+    var type = 'rest_' + a.data().ID + '_vacbal';
+    log('Код типа поля: ' + type);
+    BX24.callMethod('userfieldconfig.add', {
+      moduleId: 'crm',
+      field: {
+        entityId: 'CRM_22',
+        fieldName: 'UF_CRM_22_VACATION_BALANCE',
+        userTypeId: type,
+        editFormLabel: {ru: 'Остаток отпуска'},
+        listColumnLabel: {ru: 'Остаток отпуска'}
+      }
+    }, function(r){
+      if (r.error()) log('Не получилось: ' + JSON.stringify(r.error()));
+      else log('Готово, поле создано. Добавьте его в карточку через «Выбрать поле».');
     });
-  };
-});
+  });
+};
 </script>"""
