@@ -169,14 +169,21 @@ def install():
     if action and auth and domain:
         try:
             if action == "type":
-                rest_oauth(domain, auth, "userfieldtype.add", {
+                params = {
                     "USER_TYPE_ID": "vacbal",
                     "HANDLER": f"https://{request.host}/handler",
                     "TITLE": "Остаток отпуска",
                     "DESCRIPTION": "Считает остаток дней отпуска за текущий год",
                     "OPTIONS": {"height": 36},
-                })
-                result = "Готово: тип поля зарегистрирован."
+                }
+                try:
+                    rest_oauth(domain, auth, "userfieldtype.add", params)
+                    result = "Готово: тип поля зарегистрирован."
+                except RuntimeError as e:
+                    if "already binded" not in str(e):
+                        raise
+                    rest_oauth(domain, auth, "userfieldtype.update", params)
+                    result = "Готово: тип поля уже был зарегистрирован, адрес обработчика обновлён."
             else:
                 info = rest_oauth(domain, auth, "app.info")
                 type_code = f"rest_{info['ID']}_vacbal"
