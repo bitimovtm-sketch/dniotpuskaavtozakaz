@@ -194,8 +194,10 @@ def install():
             logging.exception("install action failed")
             result = f"Не получилось. {e}"
 
-    if not auth:
-        result = result or "Откройте приложение из меню портала."
+    diag = (f"Портал: {domain or 'НЕ ПЕРЕДАН'} | "
+            f"Ключ доступа: {'есть, ' + str(len(auth)) + ' симв.' if auth else 'НЕ ПЕРЕДАН'} | "
+            f"Нажата кнопка: {action or 'нет'}")
+    result = (result + "\n\n" if result else "") + diag
 
     return f"""<!doctype html><meta charset="utf-8">
 <script src="//api.bitrix24.com/api/v1/"></script>
