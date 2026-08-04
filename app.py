@@ -55,9 +55,19 @@ def count_days(start, end, year):
     return days
 
 
+def pick(item, name):
+    """Портал может вернуть поле как id или как ID — берём любой вариант."""
+    if name in item:
+        return item[name]
+    for key in (name.upper(), name.lower()):
+        if key in item:
+            return item[key]
+    return None
+
+
 def field_users(item):
     """Значение поля-сотрудника приводим к списку ID (поле может быть множественным)."""
-    v = item.get(EMPLOYEE_FIELD)
+    v = pick(item, EMPLOYEE_FIELD)
     if isinstance(v, list):
         return [str(x) for x in v]
     return [str(v)] if v else []
@@ -93,13 +103,14 @@ def used_days(user_id, year, exclude_id):
 
     total = 0
     for it in items:
-        if str(it["id"]) == str(exclude_id):
+        if str(pick(it, "id")) == str(exclude_id):
             continue
         if EMPLOYEE_FIELD and str(user_id) not in field_users(it):
             continue
-        if not it.get(F_START) or not it.get(F_END):
+        start_val, end_val = pick(it, F_START), pick(it, F_END)
+        if not start_val or not end_val:
             continue
-        total += count_days(parse_date(it[F_START]), parse_date(it[F_END]), year)
+        total += count_days(parse_date(start_val), parse_date(end_val), year)
     return total
 
 
@@ -108,7 +119,7 @@ def owner_id(domain, auth_id, item_id):
         item = b24("crm.item.get", {"entityTypeId": ENTITY_TYPE_ID,
                                     "id": int(item_id), "useOriginalUfNames": "Y"})["result"]["item"]
         if not EMPLOYEE_FIELD:
-            return item["createdBy"]
+            return pick(item, "createdBy")
         users = field_users(item)
         if users:
             return users[0]
