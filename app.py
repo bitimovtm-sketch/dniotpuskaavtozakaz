@@ -19,6 +19,7 @@ F_END = "UF_CRM_22_1761003173"
 F_TYPE = "UF_CRM_22_1761003205"
 TYPE_VACATION = 480
 STAGE_APPROVED = "DT1062_30:SUCCESS"
+EMPLOYEE_FIELD = "UF_CRM_22_1761003127"  # «Кто будет отсутствовать»
 
 # Нерабочие праздничные дни, ст. 112 ТК РФ. В срок отпуска не входят (ст. 120).
 HOLIDAYS = {
@@ -54,21 +55,35 @@ def count_days(start, end, year):
     return days
 
 
+def field_users(item):
+    """Значение поля-сотрудника приводим к списку ID (поле может быть множественным)."""
+    v = item.get(EMPLOYEE_FIELD)
+    if isinstance(v, list):
+        return [str(x) for x in v]
+    return [str(v)] if v else []
+
+
 def used_days(user_id, year, exclude_id):
+    select = ["id", F_START, F_END]
+    flt = {
+        "stageId": STAGE_APPROVED,
+        F_TYPE: TYPE_VACATION,
+        f">={F_END}": f"{year}-01-01",
+        f"<={F_START}": f"{year}-12-31",
+    }
+    if EMPLOYEE_FIELD:
+        select.append(EMPLOYEE_FIELD)
+    else:
+        flt["createdBy"] = user_id
+
     items = []
     start = 0
     while True:
         res = b24("crm.item.list", {
             "entityTypeId": ENTITY_TYPE_ID,
             "useOriginalUfNames": "Y",
-            "select": ["id", F_START, F_END],
-            "filter": {
-                "createdBy": user_id,
-                "stageId": STAGE_APPROVED,
-                F_TYPE: TYPE_VACATION,
-                f">={F_END}": f"{year}-01-01",
-                f"<={F_START}": f"{year}-12-31",
-            },
+            "select": select,
+            "filter": flt,
             "start": start,
         })
         items += res["items"]
@@ -80,6 +95,8 @@ def used_days(user_id, year, exclude_id):
     for it in items:
         if str(it["id"]) == str(exclude_id):
             continue
+        if EMPLOYEE_FIELD and str(user_id) not in field_users(it):
+            continue
         if not it.get(F_START) or not it.get(F_END):
             continue
         total += count_days(parse_date(it[F_START]), parse_date(it[F_END]), year)
@@ -88,8 +105,13 @@ def used_days(user_id, year, exclude_id):
 
 def owner_id(domain, auth_id, item_id):
     if item_id and int(item_id) > 0:
-        item = b24("crm.item.get", {"entityTypeId": ENTITY_TYPE_ID, "id": int(item_id)})
-        return item["item"]["createdBy"]
+        item = b24("crm.item.get", {"entityTypeId": ENTITY_TYPE_ID,
+                                    "id": int(item_id), "useOriginalUfNames": "Y"})["item"]
+        if not EMPLOYEE_FIELD:
+            return item["createdBy"]
+        users = field_users(item)
+        if users:
+            return users[0]
     r = requests.post(f"https://{domain}/rest/user.current", data={"auth": auth_id}, timeout=20)
     return r.json()["result"]["ID"]
 
@@ -100,24 +122,8 @@ PAGE = """<!doctype html><meta charset="utf-8">
  .b{display:flex;align-items:center;gap:8px;height:32px}
  .n{font-size:17px;font-weight:600;color:%(color)s}
  .c{color:#828b95}
- .r{cursor:pointer;color:#2066b0;text-decoration:none;font-size:12px}
 </style>
-<div class="b">
-  <span class="n" id="n">%(left)s</span>
-  <span class="c">из %(norm)s дней</span>
-  <a class="r" id="r" href="#">обновить</a>
-</div>
-<script>
-var P = %(params)s;
-document.getElementById('r').onclick = function(e){
-  e.preventDefault();
-  var fd = new FormData();
-  for (var k in P) fd.append(k, P[k]);
-  fetch('/handler?json=1', {method:'POST', body: fd})
-    .then(function(r){return r.json()})
-    .then(function(d){ document.getElementById('n').textContent = d.left; });
-};
-</script>"""
+<div class="b"><span class="n">%(left)s</span><span class="c">из %(norm)s дней</span></div>"""
 
 
 @app.route("/handler", methods=["POST"])
@@ -130,23 +136,18 @@ def handler():
     year = date.today().year
     try:
         uid = owner_id(domain, auth_id, item_id)
-        left = NORM - used_days(uid, year, item_id)
-    except Exception as e:
+        used = used_days(uid, year, item_id)
+        left = NORM - used
+        logging.info("balance: user=%s item=%s year=%s used=%s left=%s",
+                     uid, item_id, year, used, left)
+    except Exception:
         logging.exception("balance failed")
         left = "—"
-
-    if request.args.get("json"):
-        return {"left": left}
 
     return PAGE % {
         "left": left,
         "norm": NORM,
         "color": "#c0392b" if isinstance(left, int) and left <= 0 else "#333",
-        "params": json.dumps({
-            "DOMAIN": domain,
-            "AUTH_ID": auth_id,
-            "PLACEMENT_OPTIONS": request.form.get("PLACEMENT_OPTIONS", "{}"),
-        }),
     }
 
 
