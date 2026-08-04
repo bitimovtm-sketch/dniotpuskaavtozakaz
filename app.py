@@ -35,7 +35,7 @@ def b24(method, params=None):
     data = r.json()
     if "error" in data:
         raise RuntimeError(f"{method}: {data['error']} {data.get('error_description')}")
-    return data["result"]
+    return data
 
 
 def parse_date(value):
@@ -86,7 +86,7 @@ def used_days(user_id, year, exclude_id):
             "filter": flt,
             "start": start,
         })
-        items += res["items"]
+        items += res["result"]["items"]
         if "next" not in res:
             break
         start = res["next"]
@@ -106,14 +106,17 @@ def used_days(user_id, year, exclude_id):
 def owner_id(domain, auth_id, item_id):
     if item_id and int(item_id) > 0:
         item = b24("crm.item.get", {"entityTypeId": ENTITY_TYPE_ID,
-                                    "id": int(item_id), "useOriginalUfNames": "Y"})["item"]
+                                    "id": int(item_id), "useOriginalUfNames": "Y"})["result"]["item"]
         if not EMPLOYEE_FIELD:
             return item["createdBy"]
         users = field_users(item)
         if users:
             return users[0]
     r = requests.post(f"https://{domain}/rest/user.current", data={"auth": auth_id}, timeout=20)
-    return r.json()["result"]["ID"]
+    data = r.json()
+    if "result" not in data:
+        raise RuntimeError(f"user.current: {data.get('error')} {data.get('error_description')}")
+    return data["result"]["ID"]
 
 
 PAGE = """<!doctype html><meta charset="utf-8">
@@ -122,8 +125,10 @@ PAGE = """<!doctype html><meta charset="utf-8">
  .b{display:flex;align-items:center;gap:8px;height:32px}
  .n{font-size:17px;font-weight:600;color:%(color)s}
  .c{color:#828b95}
+ .e{color:#c0392b;font-size:11px;line-height:14px}
 </style>
-<div class="b"><span class="n">%(left)s</span><span class="c">из %(norm)s дней</span></div>"""
+<div class="b"><span class="n">%(left)s</span><span class="c">из %(norm)s дней</span></div>
+<div class="e">%(err)s</div>"""
 
 
 @app.route("/handler", methods=["POST"])
@@ -134,20 +139,23 @@ def handler():
     item_id = opts.get("ENTITY_VALUE_ID") or 0
 
     year = date.today().year
+    err = ""
     try:
         uid = owner_id(domain, auth_id, item_id)
         used = used_days(uid, year, item_id)
         left = NORM - used
         logging.info("balance: user=%s item=%s year=%s used=%s left=%s",
                      uid, item_id, year, used, left)
-    except Exception:
+    except Exception as e:
         logging.exception("balance failed")
         left = "—"
+        err = str(e)[:300]
 
     return PAGE % {
         "left": left,
         "norm": NORM,
         "color": "#c0392b" if isinstance(left, int) and left <= 0 else "#333",
+        "err": err,
     }
 
 
