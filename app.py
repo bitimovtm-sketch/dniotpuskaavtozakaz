@@ -139,21 +139,26 @@ def owner_id(domain, auth_id, item_id):
 PAGE = """<!doctype html><meta charset="utf-8">
 <style>
  body{margin:0;font:13px/18px "Helvetica Neue",Arial,sans-serif;color:#333}
- .b{display:flex;align-items:center;gap:8px;height:32px}
+ .b{display:flex;align-items:center;gap:8px;min-height:22px}
  .n{font-size:17px;font-weight:600;color:%(color)s}
  .c{color:#828b95}
+ .r{color:#2066b0;font-size:12px}
  .e{color:#c0392b;font-size:11px;line-height:14px}
 </style>
-<div class="b"><span class="n">%(left)s</span><span class="c">из %(norm)s дней &middot; %(who)s</span></div>
+<div class="b">
+  <span class="n">%(left)s</span>
+  <span class="c">из %(norm)s дней &middot; %(who)s</span>
+  %(action)s
+</div>
 <div class="e">%(err)s</div>"""
 
 
-@app.route("/handler", methods=["POST"])
+@app.route("/handler", methods=["POST", "GET"])
 def handler():
     opts = json.loads(request.form.get("PLACEMENT_OPTIONS", "{}"))
     domain = request.form.get("DOMAIN") or PORTAL
     auth_id = request.form.get("AUTH_ID")
-    item_id = opts.get("ENTITY_VALUE_ID") or 0
+    item_id = opts.get("ENTITY_VALUE_ID") or request.args.get("item") or 0
 
     year = date.today().year
     err = ""
@@ -176,6 +181,9 @@ def handler():
         "color": "#c0392b" if isinstance(left, int) and left <= 0 else "#333",
         "err": err,
         "who": who,
+        "action": (f'<a class="r" href="/handler?item={item_id}">обновить</a>'
+                   if int(item_id) > 0 else
+                   '<span class="c">(сохраните заявку, чтобы пересчитать)</span>'),
     }
 
 
