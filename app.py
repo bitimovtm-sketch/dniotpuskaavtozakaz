@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date
 
 import requests
 from flask import Flask, request
@@ -21,12 +21,6 @@ TYPE_VACATION = 480
 STAGE_APPROVED = "DT1062_30:SUCCESS"
 EMPLOYEE_FIELD = "UF_CRM_22_1761003127"  # «Кто будет отсутствовать»
 
-# Нерабочие праздничные дни, ст. 112 ТК РФ. В срок отпуска не входят (ст. 120).
-HOLIDAYS = {
-    (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
-    (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4),
-}
-
 app = Flask(__name__)
 
 
@@ -43,16 +37,10 @@ def parse_date(value):
 
 
 def count_days(start, end, year):
-    """Календарные дни отрезка, попавшие в year, без праздничных дней."""
+    """Календарные дни отрезка, попавшие в year. Выходные и праздники входят в счёт."""
     lo = max(start, date(year, 1, 1))
     hi = min(end, date(year, 12, 31))
-    days = 0
-    d = lo
-    while d <= hi:
-        if (d.month, d.day) not in HOLIDAYS:
-            days += 1
-        d += timedelta(days=1)
-    return days
+    return (hi - lo).days + 1 if hi >= lo else 0
 
 
 def pick(item, name):
