@@ -114,6 +114,12 @@ def used_days(user_id, year, exclude_id):
     return total
 
 
+def user_name(uid):
+    res = b24("user.get", {"ID": uid})["result"]
+    u = res[0] if res else {}
+    return " ".join(x for x in (u.get("LAST_NAME"), u.get("NAME")) if x) or f"ID {uid}"
+
+
 def owner_id(domain, auth_id, item_id):
     if item_id and int(item_id) > 0:
         item = b24("crm.item.get", {"entityTypeId": ENTITY_TYPE_ID,
@@ -138,7 +144,7 @@ PAGE = """<!doctype html><meta charset="utf-8">
  .c{color:#828b95}
  .e{color:#c0392b;font-size:11px;line-height:14px}
 </style>
-<div class="b"><span class="n">%(left)s</span><span class="c">из %(norm)s дней</span></div>
+<div class="b"><span class="n">%(left)s</span><span class="c">из %(norm)s дней &middot; %(who)s</span></div>
 <div class="e">%(err)s</div>"""
 
 
@@ -151,8 +157,10 @@ def handler():
 
     year = date.today().year
     err = ""
+    who = ""
     try:
         uid = owner_id(domain, auth_id, item_id)
+        who = user_name(uid)
         used = used_days(uid, year, item_id)
         left = NORM - used
         logging.info("balance: user=%s item=%s year=%s used=%s left=%s",
@@ -167,6 +175,7 @@ def handler():
         "norm": NORM,
         "color": "#c0392b" if isinstance(left, int) and left <= 0 else "#333",
         "err": err,
+        "who": who,
     }
 
 
